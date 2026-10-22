@@ -1,2 +1,266 @@
-# lecture-to-notes
-Python tool that turns recorded university lectures into structured study notes. It uses ffmpeg for audio extraction, whisper.cpp for transcription, and Gemini to combine transcripts with PDFs and personal notes. Supports Italian and English, with automatic file organization and optional browser integration.
+# `writenotes.py`
+
+`writenotes.py` prepares lecture material for generating detailed academic
+notes with Gemini.
+
+The script:
+
+1. finds every `.mp4` lecture video in its own directory;
+2. extracts mono 16 kHz audio with `ffmpeg`;
+3. transcribes the audio with `whisper.cpp`;
+4. combines all transcripts into one text file;
+5. moves PDF reference material into the `RIASSUNTO/` directory;
+6. prints the prompt to use with Gemini;
+7. optionally opens Gemini in Firefox and attempts to paste the PDFs and
+   transcript automatically.
+
+## Requirements
+
+- Python 3.9 or newer
+- [`ffmpeg`](https://ffmpeg.org/)
+- [`whisper.cpp`](https://github.com/ggerganov/whisper.cpp), including
+  `whisper-cli`
+- A Whisper model, for example `ggml-large-v3-turbo.bin`
+- Firefox, if Gemini should be opened automatically
+
+For clipboard support on Debian:
+
+```bash
+sudo apt install wl-clipboard
+```
+
+`wl-copy` is used on Wayland. The script also supports `xclip` and `xsel` on
+X11 systems.
+
+## Wayland limitations
+
+The script can run on Wayland, but automatic pasting into Firefox may be
+limited by the desktop security model.
+
+`wl-copy` can place text and file references in the clipboard. However,
+`xdotool` is an X11 utility and generally cannot simulate `Ctrl+V` or control
+the active window reliably in a GNOME/Wayland session. Wayland intentionally
+prevents background applications from arbitrarily activating another window
+or sending it keyboard input.
+
+If Firefox remains behind the current window:
+
+1. run the script normally;
+2. use `Alt+Tab` to bring Firefox to the foreground;
+3. paste the attachments and transcript manually with `Ctrl+V`;
+4. paste the prompt printed in the terminal and submit it in Gemini.
+
+Installing `xdotool` may help only in an X11 session; it is not a reliable
+Wayland solution:
+
+```bash
+sudo apt install xdotool
+```
+
+The session type can be checked with:
+
+```bash
+echo "$XDG_SESSION_TYPE"
+```
+
+If the output is `wayland`, the manual procedure above is expected when
+automatic keyboard input is blocked. No change of desktop environment is
+required.
+
+## Directory layout
+
+Place the script, lecture videos, and PDFs in the same directory:
+
+```text
+lecture-directory/
+├── writenotes.py
+├── lecture-01.mp4
+├── lecture-02.mp4
+├── professor-slides.pdf
+└── reference-notes.pdf
+```
+
+The script processes every `.mp4` and `.pdf` file found in this directory.
+PDF files are moved into `RIASSUNTO/` during execution.
+
+## Choosing the language
+
+Edit `NOTES_LANGUAGE` near the top of `writenotes.py`:
+
+```python
+NOTES_LANGUAGE = "en"
+```
+
+The supported values are:
+
+```python
+NOTES_LANGUAGE = "it"  # Italian
+NOTES_LANGUAGE = "en"  # English
+```
+
+This setting controls both:
+
+- the language passed to Whisper during transcription;
+- the language requested in the prompt sent to Gemini.
+
+The value must be exactly `it` or `en`.
+
+## Configuration
+
+### Whisper executable
+
+By default, the script searches for `whisper-cli` (or `main`) in `PATH`.
+This makes the script independent of any particular user's directory layout.
+If the executable is not in `PATH`, provide its path explicitly:
+
+```text
+/path/to/whisper.cpp/build/bin/whisper-cli
+```
+
+Override it with `--whisper-cli`:
+
+```bash
+python3 writenotes.py \
+  --whisper-cli /path/to/whisper-cli
+```
+
+Alternatively, set the `WHISPER_CPP` environment variable:
+
+```bash
+export WHISPER_CPP=/path/to/whisper-cli
+```
+
+### Whisper model
+
+Pass the model path with `--model`:
+
+```bash
+python3 writenotes.py \
+  --model /path/to/ggml-large-v3-turbo.bin
+```
+
+Alternatively, set `WHISPER_MODEL`:
+
+```bash
+export WHISPER_MODEL=/path/to/ggml-large-v3-turbo.bin
+```
+
+The default model path is:
+
+```text
+models/ggml-large-v3-turbo.bin
+```
+
+The path is resolved relative to the directory containing `writenotes.py`.
+
+## Usage
+
+Run the script from any directory:
+
+```bash
+python3 /path/to/writenotes.py
+```
+
+The script changes its working directory to its own location, so input files
+are always searched for next to `writenotes.py`.
+
+To prepare the files and print the prompt without opening Gemini or using the
+clipboard:
+
+```bash
+python3 writenotes.py --no-gemini
+```
+
+To see all command-line options:
+
+```bash
+python3 writenotes.py --help
+```
+
+## Generated files
+
+After a successful run, the script creates or updates:
+
+```text
+RIASSUNTO/
+├── APPUNTI.md
+├── Trascrizione_Unita.txt
+├── professor-slides.pdf
+└── reference-notes.pdf
+```
+
+`Trascrizione_Unita.txt` contains the transcripts of all videos, separated by
+a visible delimiter. `APPUNTI.md` is created as an empty placeholder for the
+notes that will be generated by Gemini.
+
+The script may also create individual transcript files next to the videos,
+such as `lecture-01.txt`. Auxiliary `.vtt`, `.tsv`, and `.json` files produced
+by Whisper are removed after transcription.
+
+## Gemini workflow
+
+The script prints a detailed English-language prompt describing how Gemini
+should combine the transcript and PDF material. The prompt restricts Gemini
+to topics actually covered in the recordings and specifies the required
+academic formatting.
+
+When automatic Gemini handling is enabled, the script:
+
+1. opens `https://gemini.google.com/app` in a new Firefox window;
+2. waits for the page to load;
+3. copies each PDF as a file URI and attempts to paste it;
+4. copies `Trascrizione_Unita.txt` and attempts to paste it.
+
+The prompt itself is printed in the terminal. If it is not already copied,
+copy and paste it into Gemini manually before submitting the request.
+
+On Wayland, the safest procedure is:
+
+1. run the script;
+2. bring Firefox to the foreground with `Alt+Tab` if necessary;
+3. paste the prompt manually;
+4. verify that the PDFs and transcript are attached;
+5. submit the request in Gemini.
+
+## Troubleshooting
+
+### `Model not found`
+
+Provide the correct model path:
+
+```bash
+python3 writenotes.py --model /absolute/path/to/model.bin
+```
+
+### `Command not found: ffmpeg`
+
+Install `ffmpeg` using Debian's package manager:
+
+```bash
+sudo apt install ffmpeg
+```
+
+### `whisper.cpp did not create ...`
+
+Check that:
+
+- the `whisper-cli` path is correct;
+- the model is compatible with the installed `whisper.cpp`;
+- the video can be decoded by `ffmpeg`.
+
+### Clipboard or automatic paste does not work
+
+On Wayland, install the clipboard utility:
+
+```bash
+sudo apt install wl-clipboard
+```
+
+If automatic keyboard input still fails, bring Firefox to the foreground and
+paste the clipboard contents manually. This is a desktop-security
+restriction, not necessarily a script error.
+
+### PDFs are no longer in the original directory
+
+This is expected: all PDFs found next to the script are moved to
+`RIASSUNTO/` so that they can be attached together with the transcript.
