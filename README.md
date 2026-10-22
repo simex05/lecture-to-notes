@@ -264,3 +264,9 @@ restriction, not necessarily a script error.
 
 This is expected: all PDFs found next to the script are moved to
 `RIASSUNTO/` so that they can be attached together with the transcript.
+
+
+## License
+
+This project is licensed under the GNU General Public License v3.0.
+See the [LICENSE](LICENSE) file for details.
